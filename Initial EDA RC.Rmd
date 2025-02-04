@@ -1,0 +1,101 @@
+---
+title: "Project 1 EDA"
+author: "Robert Carstens"
+date: "2025-02-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Looking at dataset
+
+```{r cars}
+head(Hospital)
+View(Hospital)
+
+library(GGally)
+ggpairs(Hospital)
+```
+
+
+
+```{r cars}
+cor_matrix <- cor(Hospital[sapply(Hospital, is.numeric)], use="complete.obs")
+cor_matrix["Lgth.of.Sty", ]
+
+
+#after some initial EDA one thing is clear, Region should not be numeric
+`````{r cars}
+cor_matrix <- cor(Hospital[sapply(Hospital, is.numeric)], use="complete.obs")
+cor_matrix["Lgth.of.Sty", ]
+
+
+#after some initial EDA one thing is clear, Region should not be numeric
+````
+
+
+Steps to fix data
+We need to make region a factor and not a numeric
+```{r cars}
+Hospital$Region <- as.factor(Hospital$Region)
+
+library(ggplot2)
+ggplot(Hospital, aes(x = Region, y = Lgth.of.Sty)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Length of Stay by Region") +
+  theme_minimal()
+
+```
+
+Even though conventional wisdom would say region should most likely be a factor and not a numeric. It looks like there is kind of a linear relationship
+
+
+VIFS
+
+```{r cars}
+
+library(car)
+
+
+model <- lm(Lgth.of.Sty ~ Age + Inf.Risk + R.Cul.Rat + R.CX.ray.Rat + 
+             N.Beds + Med.Sc.Aff + Avg.Pat + Avg.Nur + Pct.Ser.Fac + Region, 
+             data = Hospital)
+
+
+improved_model <- lm(Lgth.of.Sty ~ Age + Inf.Risk + R.Cul.Rat + R.CX.ray.Rat + 
+             N.Beds + Med.Sc.Aff   + Pct.Ser.Fac + Region, 
+             data = Hospital)
+
+vif(model)
+vif(improved_model)
+cor(Hospital$N.Beds, Hospital$Avg.Nur)
+
+
+
+
+
+```
+```{r cars}
+library(GGally)
+
+# Select only the variables in your improved_model
+selected_vars <- c("Lgth.of.Sty", "Age", "Inf.Risk", "R.Cul.Rat", "R.CX.ray.Rat", 
+                   "N.Beds", "Med.Sc.Aff", "Pct.Ser.Fac", "Region")
+
+# Subset the dataset
+Hospital_subset <- Hospital[selected_vars]
+
+# Generate the pair plot
+ggpairs(Hospital_subset)
+
+
+```
+
+```{r cars}
+improved_model <- lm(Lgth.of.Sty ~ Age + Inf.Risk + R.Cul.Rat + R.CX.ray.Rat + 
+             N.Beds + Med.Sc.Aff   + Pct.Ser.Fac + Region, 
+             data = Hospital)
+summary(improved_model)
+```
