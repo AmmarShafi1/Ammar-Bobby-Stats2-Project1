@@ -1,0 +1,106 @@
+---
+title: "Hospital EDA"
+output: html_document
+date: "2025-02-04"
+---
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+library(corrplot)
+library(DataExplorer)
+
+# Load the dataset
+file_path <- "HospitalDurations.csv"
+df <- read.csv(file_path, stringsAsFactors = FALSE)
+```
+
+
+```{r}
+head(df)
+```
+
+
+```{r}
+# Summary statistics
+summary(df)
+```
+
+
+```{r}
+# Check for missing values
+colSums(is.na(df))
+```
+
+```{r}
+# Histogram for each numeric variable
+plot_histogram(df)
+```
+
+
+```{r}
+# Boxplots for identifying outliers
+plot_boxplot(df, by = "Region")  # Change "Region" as needed for categorical grouping
+```
+
+
+```{r}
+library(corrplot)
+
+# Correlation matrix for numeric variables
+numeric_df <- df %>% select_if(is.numeric)
+corr_matrix <- cor(numeric_df, use = "complete.obs")
+
+# Plot the correlation matrix with correlation coefficients
+corrplot(corr_matrix, 
+         method = "color",    # Use colored tiles
+         type = "upper",      # Show only the upper triangle
+         addCoef.col = "black", # Add correlation coefficients in black
+         tl.col = "black",    # Text label color
+         tl.srt = 45,         # Rotate text labels
+         number.cex = 0.8)    # Adjust size of the numbers
+```
+
+
+```{r}
+# Pair plot for relationships
+pairs(numeric_df)
+```
+```{r}
+library(GGally)
+# Select relevant columns: "Inf.Risk" and other numeric variables
+columns_of_interest <- c("Inf.Risk", "Lgth.of.Sty", "Age", "R.Cul.Rat", "R.CX.ray.Rat", "N.Beds", "Avg.Pat", "Avg.Nur")
+filtered_df <- numeric_df[, columns_of_interest]
+
+# Pair plot focusing on "Inf.Risk"
+ggpairs(filtered_df,
+        columns = 1:ncol(filtered_df), # All columns in filtered_df
+        title = "Pair Plot Relative to Infection Risk",
+        lower = list(continuous = wrap("smooth", alpha = 0.3)),
+        upper = list(continuous = wrap("cor", size = 4)),
+        diag = list(continuous = wrap("densityDiag")))
+
+# Save the plot to a file (optional)
+ggsave("infection_risk_pair_plot.png", width = 12, height = 8)
+```
+
+
+```{r}
+# Density plots for numerical features
+plot_density(df)
+```
+
+EDA Results:
+Log Transform:
+    Lgth.of.Sty (if variance stabilization is needed).
+    Inf.Risk (to normalize its distribution).
+    N.Beds (if clustering or skewness affects the model).
+
+Check Multicollinearity:
+    With Avg.Pat and Avg.Nur being highly correlated, one of them might be excluded from the model.
+
+
+
+
+
