@@ -99,7 +99,260 @@ Log Transform:
 
 Check Multicollinearity:
     With Avg.Pat and Avg.Nur being highly correlated, one of them might be excluded from the model.
+```{r}
+# Load necessary libraries
+if (!require(car)) install.packages("car")
+if (!require(MASS)) install.packages("MASS")
+if (!require(DataExplorer)) install.packages("DataExplorer")
+library(car)
+library(MASS)
+library(dplyr)
+library(DataExplorer)
 
+# Create new columns for log-transformed variables
+df <- df %>%
+  mutate(
+    Lgth.of.Sty = log(Lgth.of.Sty),    # Log-transform length of stay
+    N.Beds = log(N.Beds + 1),          # Log-transform number of beds
+    Avg.Pat = log(Avg.Pat + 1),        # Log-transform number of patients
+    Avg.Nur = log(Avg.Nur + 1)         # Log-transform number of nurses
+  )
+
+# Convert categorical variables to factors
+df$Region <- as.factor(df$Region)
+df$Med.Sc.Aff <- as.factor(df$Med.Sc.Aff)
+
+# Plot density for all variables, including new log-transformed ones
+plot_density(df)
+```
+
+
+```{r}
+# Build the regression model
+model <- lm(
+  Lgth.of.Sty ~ Inf.Risk + Age + N.Beds + Avg.Nur + Avg.Pat +
+    R.Cul.Rat + R.CX.ray.Rat + Region + Med.Sc.Aff,
+  data = df
+)
+
+# Summarize the model
+summary(model)
+```
+
+```{r}
+# Check multicollinearity using VIF
+vif(model)
+```
+
+
+```{r}
+# Diagnostics: Plot residuals to check assumptions
+par(mfrow = c(2, 2))
+plot(model)
+```
+
+```{r}
+# Adjusted R-squared
+cat("Adjusted R-squared:", summary(model)$adj.r.squared, "\n")
+```
+
+Remove Avg.Pat because of high colinearity:
+
+```{r}
+model <- lm(
+  Lgth.of.Sty ~ Inf.Risk + Age + N.Beds + Avg.Nur +
+    R.Cul.Rat + R.CX.ray.Rat + Region + Med.Sc.Aff,
+  data = df
+)
+```
+
+```{r}
+summary(model)
+```
+```{r}
+# Adjusted R-squared
+cat("Adjusted R-squared:", summary(model)$adj.r.squared, "\n")
+```
+##############################################################
+KNN
+##############################################################
+
+```{r}
+# Load necessary libraries
+if (!require(caret)) install.packages("caret")
+if (!require(dplyr)) install.packages("dplyr")
+if (!require(ggplot2)) install.packages("ggplot2")
+library(caret)
+library(dplyr)
+library(ggplot2)
+
+df <- read.csv(file_path, stringsAsFactors = FALSE)
+
+# Clean and preprocess the data
+df <- df %>%
+  filter(`Lgth.of.Sty` > 0) %>%  # Remove invalid values for length of stay
+  mutate(
+    Lgth.of.Sty = log(Lgth.of.Sty),    # Log-transform length of stay
+    N.Beds = log(N.Beds + 1),          # Log-transform number of beds
+    Avg.Pat = log(Avg.Pat + 1),        # Log-transform number of patients
+    Avg.Nur = log(Avg.Nur + 1)         # Log-transform number of nurses
+  )
+
+# Convert categorical variables to factors
+df$Region <- as.factor(df$Region)
+df$Med.Sc.Aff <- as.factor(df$Med.Sc.Aff)
+
+# Split the data into training and testing sets
+set.seed(123) # For reproducibility
+train_index <- createDataPartition(df$Lgth.of.Sty, p = 0.8, list = FALSE)
+train_data <- df[train_index, ]
+test_data <- df[-train_index, ]
+```
+
+
+```{r}
+# Standardize the numerical variables
+preprocess <- preProcess(train_data[, c("Inf.Risk", "Age", "N.Beds", "Avg.Nur", "Avg.Pat", "R.Cul.Rat", "R.CX.ray.Rat")],
+                         method = c("center", "scale"))
+train_data_scaled <- train_data
+test_data_scaled <- test_data
+
+train_data_scaled[, c("Inf.Risk", "Age", "N.Beds", "Avg.Nur", "Avg.Pat", "R.Cul.Rat", "R.CX.ray.Rat")] <- predict(preprocess, train_data[, c("Inf.Risk", "Age", "N.Beds", "Avg.Nur", "Avg.Pat", "R.Cul.Rat", "R.CX.ray.Rat")])
+test_data_scaled[, c("Inf.Risk", "Age", "N.Beds", "Avg.Nur", "Avg.Pat", "R.Cul.Rat", "R.CX.ray.Rat")] <- predict(preprocess, test_data[, c("Inf.Risk", "Age", "N.Beds", "Avg.Nur", "Avg.Pat", "R.Cul.Rat", "R.CX.ray.Rat")])
+```
+
+
+```{r}
+# Train the KNN model with cross-validation
+set.seed(123)
+knn_model <- train(
+  Lgth.of.Sty ~ Inf.Risk + Age + N.Beds + Avg.Nur + Avg.Pat + R.Cul.Rat + R.CX.ray.Rat + Region + Med.Sc.Aff,
+  data = train_data_scaled,
+  method = "knn",
+  tuneGrid = data.frame(k = seq(1, min(nrow(train_data_scaled), 10), by = 2)), # Test k = 1, 3, 5, ..., up to 10 or dataset size
+  trControl = trainControl(method = "cv", number = 5) # 5-fold cross-validation
+)
+
+# View the best k and model summary
+print(knn_model)
+```
+
+
+```{r}
+# Make predictions on the test set
+knn_predictions <- predict(knn_model, newdata = test_data_scaled)
+
+# Evaluate model performance
+model_performance <- postResample(pred = knn_predictions, obs = test_data_scaled$Lgth.of.Sty)
+cat("\nModel Performance on Test Set:\n")
+print(model_performance)
+
+# Plot the predicted vs actual values
+ggplot(data.frame(Predicted = knn_predictions, Actual = test_data_scaled$Lgth.of.Sty), aes(x = Actual, y = Predicted)) +
+  geom_point(color = "blue", alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "KNN Predicted vs Actual Values", x = "Actual", y = "Predicted") +
+  theme_minimal()
+
+
+```
+
+
+#################
+Gradient Boost
+#################
+
+```{r}
+# Load necessary libraries
+if (!require(caret)) install.packages("caret")
+if (!require(dplyr)) install.packages("dplyr")
+if (!require(ggplot2)) install.packages("ggplot2")
+if (!require(gbm)) install.packages("gbm")
+library(caret)
+library(dplyr)
+library(ggplot2)
+library(gbm)
+
+df <- read.csv(file_path, stringsAsFactors = FALSE)
+
+# Clean and preprocess the data
+df <- df %>%
+  filter(`Lgth.of.Sty` > 0) %>%  # Remove invalid values for length of stay
+  mutate(
+    Lgth.of.Sty = log(Lgth.of.Sty),    # Log-transform length of stay
+    N.Beds = log(N.Beds + 1),          # Log-transform number of beds
+    Avg.Pat = log(Avg.Pat + 1),        # Log-transform number of patients
+    Avg.Nur = log(Avg.Nur + 1)         # Log-transform number of nurses
+  )
+
+# Convert categorical variables to factors
+df$Region <- as.factor(df$Region)
+df$Med.Sc.Aff <- as.factor(df$Med.Sc.Aff)
+
+# Split the data into training and testing sets
+set.seed(123) # For reproducibility
+train_index <- createDataPartition(df$Lgth.of.Sty, p = 0.8, list = FALSE)
+train_data <- df[train_index, ]
+test_data <- df[-train_index, ]
+
+# Define a tuning grid with adjusted parameters
+tune_grid <- expand.grid(
+  n.trees = seq(50, 300, by = 50),  # Number of trees
+  interaction.depth = c(1, 3, 5),   # Depth of each tree
+  shrinkage = c(0.01, 0.1),         # Learning rate
+  n.minobsinnode = c(1, 5, 10)      # Min observations in terminal nodes
+)
+```
+
+
+```{r}
+# Train a Gradient Boosting Model
+set.seed(123)
+gbm_model <- train(
+  Lgth.of.Sty ~ Inf.Risk + Age + N.Beds + Avg.Nur + Avg.Pat + R.Cul.Rat + R.CX.ray.Rat + Region + Med.Sc.Aff,
+  data = train_data,
+  method = "gbm",
+  trControl = trainControl(method = "cv", number = 5), # 5-fold cross-validation
+  tuneGrid = tune_grid,
+  verbose = FALSE,
+  bag.fraction = 0.8 # Use 80% of the data for subsampling
+)
+```
+
+
+```{r}
+# Best model hyperparameters
+cat("Best Hyperparameters:\n")
+print(gbm_model$bestTune)
+```
+
+
+```{r}
+# Model summary
+print(gbm_model)
+```
+
+
+```{r}
+# Make predictions on the test set
+gbm_predictions <- predict(gbm_model, newdata = test_data)
+
+# Evaluate model performance
+model_performance <- postResample(pred = gbm_predictions, obs = test_data$Lgth.of.Sty)
+cat("\nModel Performance on Test Set:\n")
+print(model_performance)
+```
+
+
+```{r}
+# Plot predicted vs actual values
+ggplot(data.frame(Predicted = gbm_predictions, Actual = test_data$Lgth.of.Sty), aes(x = Actual, y = Predicted)) +
+  geom_point(color = "blue", alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Gradient Boosting Predicted vs Actual Values", x = "Actual", y = "Predicted") +
+  theme_minimal()
+
+```
 
 
 
